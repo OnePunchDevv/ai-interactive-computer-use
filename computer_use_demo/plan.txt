@@ -1,0 +1,156 @@
+
+Full Assessment Execution Plan
+Architecture Overview (What We're Building)
+
+[HTML/JS Frontend] <--WebSocket/SSE--> [FastAPI Backend] <--> [PostgreSQL DB]
+                                              |
+                                    [Session Manager]
+                                    (asyncio tasks)
+                                              |
+                              [Per-session Docker containers]
+                              (each has its own Xvfb + VNC + agent loop)
+Phase 1 — Project Scaffolding (30 min)
+Step 1.1 — Define the new directory structure alongside the existing code:
+
+
+computer-use-demo/
+├── backend/
+│   ├── app/
+│   │   ├── main.py            # FastAPI app entry
+│   │   ├── config.py          # Settings/env vars
+│   │   ├── database.py        # SQLAlchemy async setup
+│   │   ├── models.py          # DB models (Session, Message)
+│   │   ├── schemas.py         # Pydantic request/response schemas
+│   │   ├── routers/
+│   │   │   ├── sessions.py    # CRUD session endpoints
+│   │   │   ├── messages.py    # Send message, stream response
+│   │   │   └── vnc.py         # VNC proxy/token endpoint
+│   │   ├── services/
+│   │   │   ├── session_manager.py  # Manages concurrent agent tasks
+│   │   │   └── agent_runner.py     # Wraps the existing loop.py
+│   │   └── core/
+│   │       └── events.py      # SSE event helpers
+│   ├── requirements.txt
+│   └── Dockerfile
+├── frontend/
+│   ├── index.html             # Single-page app
+│   ├── app.js                 # Vanilla JS, no framework
+│   └── style.css
+├── docker-compose.yml
+├── postgres-init/
+│   └── init.sql
+└── README.md
+Step 1.2 — Add new dependencies to backend/requirements.txt:
+
+fastapi, uvicorn[standard]
+sqlalchemy[asyncio], asyncpg
+alembic
+pydantic-settings
+sse-starlette (Server-Sent Events)
+All existing computer-use-demo deps carried over
+Phase 2 — Database Layer (45 min)
+Step 2.1 — database.py: Async SQLAlchemy engine with asyncpg, session factory
+
+Step 2.2 — models.py: Two tables:
+
+sessions: id (uuid), title, status (idle|running|done|error), created_at, updated_at, display_num, vnc_port
+messages: id (uuid), session_id (fk), role (user|assistant|tool_use|tool_result), content (jsonb), created_at, seq (int)
+Step 2.3 — Alembic migration for initial schema
+
+Step 2.4 — schemas.py: Pydantic models matching DB models, plus request schemas
+
+Phase 3 — Session Manager & Agent Runner (1 hour)
+Step 3.1 — agent_runner.py:
+
+Wraps loop.py's sampling_loop()
+Accepts a session ID and initial message
+Writes every message/tool event to DB as it streams
+Publishes each event to a per-session asyncio.Queue
+Manages its own display_num and DISPLAY env var per session
+Step 3.2 — session_manager.py:
+
+Maintains Dict[session_id, asyncio.Task] — no fixed cap
+create_session() — picks next free display number (:2, :3, ...), creates DB record, starts Xvfb on that display, assigns a VNC port
+run_agent(session_id, message) — spawns new asyncio.Task per request (non-blocking), each task is independent
+subscribe(session_id) — returns the queue for SSE streaming
+stop_session(session_id) — cancels task, kills display process, updates DB
+Uses asyncio.Lock per session for message ordering (prevents race conditions)
+Dynamic display/port allocation using a asyncio.Semaphore-guarded counter
+Key concurrency design: Every session runs in its own asyncio.Task with its own DISPLAY=:N env var pointing to a dedicated Xvfb process. No shared display state. Sessions are fully isolated.
+
+Phase 4 — FastAPI Routers (45 min)
+Step 4.1 — routers/sessions.py:
+
+POST /sessions — create new session, return {id, title, status, vnc_url}
+GET /sessions — list all sessions with metadata
+GET /sessions/{id} — get single session
+DELETE /sessions/{id} — stop and delete session
+Step 4.2 — routers/messages.py:
+
+POST /sessions/{id}/messages — send a user message, triggers agent (non-blocking, returns 202 Accepted)
+GET /sessions/{id}/messages — return full message history from DB
+GET /sessions/{id}/stream — SSE endpoint: streams real-time events from the session queue (text chunks, tool calls, tool results, status changes)
+Step 4.3 — routers/vnc.py:
+
+GET /sessions/{id}/vnc-info — returns the noVNC URL and port for that session's display
+Step 4.4 — main.py: CORS, lifespan events (startup DB init, shutdown cleanup), router registration
+
+Phase 5 — Docker Compose (30 min)
+Step 5.1 — docker-compose.yml with:
+
+db service: postgres:16-alpine, persistent volume
+backend service: builds from backend/Dockerfile, env vars, privileged: true (needed for Xvfb inside container), mounts /tmp/.X11-unix
+frontend service: nginx serving frontend/ static files on port 3000
+Networks: internal app-network
+Step 5.2 — backend/Dockerfile: Extend the existing computer-use-demo image (inherit all the Xvfb/VNC tooling), add FastAPI app layer on top
+
+Step 5.3 — Environment: .env.example file with ANTHROPIC_API_KEY, DATABASE_URL, etc.
+
+Phase 6 — Frontend (30 min)
+A clean, minimal HTML/JS app (no React, no Swagger):
+
+Layout:
+
+Left sidebar: Session list + "New Session" button
+Center: noVNC iframe (connects to the selected session's VNC port)
+Right panel top: Chat messages (user, assistant, tool calls rendered distinctly)
+Right panel bottom: File/status area
+JS behavior:
+
+On "New Session": POST /sessions, add to sidebar
+On session click: load history, open VNC iframe, start SSE stream
+SSE stream listener: append messages in real-time as they arrive
+Tool calls shown with a distinct style (e.g., gray code block with tool name)
+Spinner while agent is running, input enabled only when idle
+After task completes, re-enable input for new task in same session
+Phase 7 — Testing Concurrency & Polish (30 min)
+Step 7.1 — Manual test: open two browser tabs, create two sessions, send messages simultaneously, verify both VNC windows show activity at the same time
+
+Step 7.2 — Add a GET /health endpoint
+
+Step 7.3 — Error handling: unhandled exceptions in agent tasks write status=error to DB and emit an error SSE event
+
+Step 7.4 — Cleanup: idle session GC (optional background task)
+
+Phase 8 — Documentation (30 min)
+README structure:
+
+Author name (first line)
+Architecture overview with ASCII diagram
+Sequence diagram (Mermaid)
+Quick start (docker compose up)
+API docs table (all endpoints)
+Dev setup without Docker
+Demo video link
+Execution Order (Start Here)
+#	Step	Est. Time
+1	Set up backend/ scaffold, requirements	15 min
+2	DB models, schema, async engine	20 min
+3	agent_runner.py wrapping loop.py	30 min
+4	session_manager.py with dynamic concurrency	30 min
+5	All 3 routers + main.py	40 min
+6	backend/Dockerfile extending base image	20 min
+7	docker-compose.yml	20 min
+8	Frontend HTML/JS	30 min
+9	End-to-end test + concurrency demo	20 min
+10	README + sequence diagram	25 min

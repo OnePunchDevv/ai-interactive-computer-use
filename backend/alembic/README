@@ -1,0 +1,12 @@
+Generic single-database configuration with an async driver.
+
+Run from the `backend/` directory:
+
+  # Apply all pending migrations
+  alembic upgrade head
+
+  # Generate a new migration after changing models
+  alembic revision --autogenerate -m "description"
+
+  # Roll back one step
+  alembic downgrade -1
