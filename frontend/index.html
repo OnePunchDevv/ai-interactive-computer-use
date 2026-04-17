@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Computer Use Agent</title>
+  <link rel="stylesheet" href="style.css?v=2" />
+</head>
+<body>
+
+  <!-- =====================================================================
+       Sidebar — session list
+  ====================================================================== -->
+  <aside id="sidebar">
+    <div class="sidebar-header">
+      <h2>Sessions</h2>
+      <button id="btn-new-session" title="Start a new agent session">+ New</button>
+    </div>
+    <div id="session-list">
+      <!-- populated by app.js -->
+    </div>
+  </aside>
+
+  <!-- =====================================================================
+       Main area
+  ====================================================================== -->
+  <main id="main">
+
+    <!-- VNC display -->
+    <section id="vnc-panel">
+      <div class="vnc-header">Desktop View</div>
+      <div id="vnc-placeholder">Select a session to view its desktop</div>
+      <iframe id="vnc-frame" style="display:none" allow="fullscreen"></iframe>
+    </section>
+
+    <!-- Chat + input -->
+    <section id="right-panel">
+
+      <!-- empty state (shown when no session is selected) -->
+      <div id="empty-state">
+        <h3>Computer Use Agent</h3>
+        <p>Create a new session or select one from the sidebar to get started.</p>
+      </div>
+
+      <!-- chat UI (hidden until a session is selected) -->
+      <div id="chat-ui" style="display:none; flex:1; flex-direction:column; overflow:hidden;">
+        <div class="chat-header">
+          <span id="chat-session-title">Session</span>
+          <span id="chat-status-dot" class="status-dot idle" style="margin-left:auto"></span>
+          <span id="chat-status-label" style="font-size:11px; color:var(--muted)">idle</span>
+        </div>
+
+        <div id="chat-messages"></div>
+
+        <div id="input-area">
+          <textarea
+            id="msg-input"
+            rows="1"
+            placeholder="Send a task to the agent…"
+            disabled
+          ></textarea>
+          <button id="btn-send" disabled>Send</button>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
