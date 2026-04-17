@@ -7,6 +7,10 @@ A production-ready, highly parallelized FastAPI backend for the [Anthropic Compu
 ## Demo Video
 
 > 📹 [Demo Video](https://www.loom.com/share/79a83cb24a774b6db07de8d82d439380)
+> 📹 [Use Case 1]([https://www.loom.com/share/79a83cb24a774b6db07de8d82d439380](https://www.loom.com/share/212e0765822f41b09919d603be6c9256))
+> 📹 [Use Case 2]([https://www.loom.com/share/79a83cb24a774b6db07de8d82d439380](https://www.loom.com/share/ce21ead92a714adeb868beb95cb01a90))
+
+https://www.loom.com/share/ce21ead92a714adeb868beb95cb01a90
 ---
 
 ## Architecture
