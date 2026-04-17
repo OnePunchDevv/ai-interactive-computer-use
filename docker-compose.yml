@@ -1,0 +1,64 @@
+services:
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: computer_use
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+    # No host port needed; backend connects via service DNS `db:5432`.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    privileged: true
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      API_PROVIDER: ${API_PROVIDER:-anthropic}
+      MODEL: ${MODEL:-claude-sonnet-4-5-20250929}
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/computer_use
+      DISPLAY_WIDTH: ${DISPLAY_WIDTH:-1024}
+      DISPLAY_HEIGHT: ${DISPLAY_HEIGHT:-768}
+      DISPLAY_START: ${DISPLAY_START:-10}
+      VNC_BASE_PORT: ${VNC_BASE_PORT:-5910}
+      NOVNC_BASE_PORT: ${NOVNC_BASE_PORT:-6910}
+    ports:
+      - "8000:8000"
+      - "5910-5960:5910-5960"
+      - "6910-6960:6910-6960"
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  frontend:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+      - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
